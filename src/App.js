@@ -23,6 +23,7 @@ const App = () => {
     const videoRef = useRef(null);
     const listItemToFocusRef = useRef();
     const listRef = useRef();
+    const subtitlePlayEndTimeRef = useRef(null);
 
     const [subtitleFirstData, setSubtitleFirstData] = useState([]);
     const [subtitleSecondData, setSubtitleSecondData] = useState([]);
@@ -38,6 +39,7 @@ const App = () => {
     const [isShowHideSettings, setIsShowHideSettings] = useState(false);
     const [isShowHideSubtitleList, setIsShowHideSubtitleList] = useState(false);
     const [isScrolling, setIsScrolling] = useState(false);
+    const [subtitleSearch, setSubtitleSearch] = useState("");
 
     const focusOnListItem = useCallback(() => {
         if (
@@ -102,21 +104,34 @@ const App = () => {
 
     //region Video Element (handleVideoTimeUpdate, handleVideoLoadedMetadata)
     const handleVideoTimeUpdate = () => {
-        setCurrentTime(videoRef.current.currentTime);
+        const video = videoRef.current;
+        const videoCurrentTime = video.currentTime;
+
+        setCurrentTime(videoCurrentTime);
 
         if (!isActiveProgress) {
             if (durationTime !== 0) {
-                setProgress(videoRef.current.currentTime / durationTime);
+                setProgress(videoCurrentTime / durationTime);
             }
         }
 
-        if (videoRef.current.currentTime === durationTime && durationTime !== 0) {
+        if (videoCurrentTime === durationTime && durationTime !== 0) {
             setIsPlaying(false);
         }
 
+        if (
+            subtitlePlayEndTimeRef.current !== null &&
+            videoCurrentTime >= subtitlePlayEndTimeRef.current
+        ) {
+            video.pause();
+            setIsPlaying(false);
+            subtitlePlayEndTimeRef.current = null;
+            return;
+        }
+
         if (repeat_StartTime !== repeat_EndTime) {
-            if (videoRef.current.currentTime >= repeat_EndTime) {
-                videoRef.current.currentTime = repeat_StartTime;
+            if (videoCurrentTime >= repeat_EndTime) {
+                video.currentTime = repeat_StartTime;
                 repeatCount -= 1;
             }
 
@@ -160,6 +175,10 @@ const App = () => {
 
         return formattedTime;
     };
+
+    const stripSubtitleTags = (text) => text.replace(/<[^>]*>/g, " ");
+
+    const normalizeSubtitleText = (text) => text.toLowerCase().trim();
     //endregion
 
     //region Subtitle (renderSubtitleFirst, renderSubtitleSecond)
@@ -189,6 +208,17 @@ const App = () => {
     }
 
     //endregion
+
+    const subtitleSearchValue = normalizeSubtitleText(subtitleSearch);
+    const filteredSubtitleFirstData = subtitleSearchValue
+        ? subtitleFirstData.filter((item) => {
+            const searchableSubtitle = normalizeSubtitleText(
+                `${stripSubtitleTags(item.text)} ${item.startTime} ${item.endTime}`,
+            );
+
+            return searchableSubtitle.includes(subtitleSearchValue);
+        })
+        : subtitleFirstData;
 
     //region scroll to active subtitle
     // const handleScroll = () => {
@@ -351,6 +381,7 @@ const App = () => {
 
     const handleChangeProgress = (e) => {
         isActiveProgress = true;
+        subtitlePlayEndTimeRef.current = null;
 
         if (videoRef.current) {
             const newProgress = parseFloat(e.target.value);
@@ -386,12 +417,18 @@ const App = () => {
     };
 
     const handleSwitchToVideoSubtitle = (startTime, endTime) => {
-        console.log("startTime: %s , endTime: %s", timeToSeconds(startTime), timeToSeconds(endTime))
-        repeat_StartTime = timeToSeconds(startTime);
-        repeat_EndTime = timeToSeconds(endTime);
+        const subtitleStartTime = timeToSeconds(startTime);
+        const subtitleEndTime = timeToSeconds(endTime);
+
+        repeat_StartTime = 0;
+        repeat_EndTime = 0;
+        repeatCount = repeatCountReset;
+        subtitlePlayEndTimeRef.current = subtitleEndTime;
 
         if (videoRef.current) {
-            videoRef.current.currentTime = parseFloat(timeToSeconds(startTime));
+            videoRef.current.currentTime = subtitleStartTime;
+            videoRef.current.play();
+            setIsPlaying(true);
         }
     };
 
@@ -781,9 +818,19 @@ const App = () => {
                     data-testid="div-show-hide-subtitle-list"
                 >
                     <div className={`subtitle-sidebar-inner`} ref={listRef}>
+                        <div className="subtitle-search">
+                            <input
+                                type="search"
+                                value={subtitleSearch}
+                                onChange={(event) => setSubtitleSearch(event.target.value)}
+                                placeholder="Search subtitle..."
+                                aria-label="Search subtitle"
+                                dir="auto"
+                            />
+                        </div>
                         <ul>
-                            {subtitleFirstData.map((item, index) => (
-                                <li key={index}>
+                            {filteredSubtitleFirstData.map((item) => (
+                                <li key={item.id}>
                                     <div
                                         ref={
                                             activeSubtitleId === item.id ? listItemToFocusRef : null
@@ -809,6 +856,9 @@ const App = () => {
                                 </li>
                             ))}
                         </ul>
+                        {filteredSubtitleFirstData.length === 0 && (
+                            <div className="subtitle-empty">No subtitle found</div>
+                        )}
                     </div>
                 </div>
             </div>

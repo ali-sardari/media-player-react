@@ -526,6 +526,35 @@ code {
     font-size: 14px;
 }
 
+.subtitle-search {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding: 4px;
+    background: rgba(0, 0, 0, 0.9);
+}
+
+.subtitle-search input {
+    width: 100%;
+    height: 34px;
+    padding: 6px 10px;
+    color: #f4f4f4;
+    background: #1f1f1f;
+    border: 1px solid #555;
+    border-radius: 6px;
+    outline: none;
+}
+
+.subtitle-search input:focus {
+    border-color: #7bbdff;
+}
+
+.subtitle-empty {
+    padding: 14px 8px;
+    color: #bdbdbd;
+    text-align: center;
+}
+
 .subtitle-item-active {
     background: rgba(123, 189, 255, 0.4) !important;
     color: #dcffef;
