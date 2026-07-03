@@ -24,6 +24,7 @@ const App = () => {
     const listItemToFocusRef = useRef();
     const listRef = useRef();
     const subtitlePlayEndTimeRef = useRef(null);
+    const subtitlePlayFrameRef = useRef(null);
 
     const [subtitleFirstData, setSubtitleFirstData] = useState([]);
     const [subtitleSecondData, setSubtitleSecondData] = useState([]);
@@ -103,6 +104,57 @@ const App = () => {
     //endregion
 
     //region Video Element (handleVideoTimeUpdate, handleVideoLoadedMetadata)
+    function clearSubtitlePlaybackLimit() {
+        if (subtitlePlayFrameRef.current !== null) {
+            cancelAnimationFrame(subtitlePlayFrameRef.current);
+            subtitlePlayFrameRef.current = null;
+        }
+
+        subtitlePlayEndTimeRef.current = null;
+    }
+
+    function stopVideoAtSubtitleEnd() {
+        const video = videoRef.current;
+
+        if (!video || subtitlePlayEndTimeRef.current === null) {
+            clearSubtitlePlaybackLimit();
+            return;
+        }
+
+        if (video.currentTime >= subtitlePlayEndTimeRef.current) {
+            video.pause();
+            video.currentTime = subtitlePlayEndTimeRef.current;
+            setCurrentTime(video.currentTime);
+
+            if (durationTime !== 0) {
+                setProgress(video.currentTime / durationTime);
+            }
+
+            setIsPlaying(false);
+            clearSubtitlePlaybackLimit();
+            return;
+        }
+
+        subtitlePlayFrameRef.current = requestAnimationFrame(stopVideoAtSubtitleEnd);
+    }
+
+    function startSubtitlePlaybackLimit(endTime) {
+        if (subtitlePlayFrameRef.current !== null) {
+            cancelAnimationFrame(subtitlePlayFrameRef.current);
+        }
+
+        subtitlePlayEndTimeRef.current = endTime;
+        subtitlePlayFrameRef.current = requestAnimationFrame(stopVideoAtSubtitleEnd);
+    }
+
+    useEffect(() => {
+        return () => {
+            if (subtitlePlayFrameRef.current !== null) {
+                cancelAnimationFrame(subtitlePlayFrameRef.current);
+            }
+        };
+    }, []);
+
     const handleVideoTimeUpdate = () => {
         const video = videoRef.current;
         const videoCurrentTime = video.currentTime;
@@ -117,16 +169,6 @@ const App = () => {
 
         if (videoCurrentTime === durationTime && durationTime !== 0) {
             setIsPlaying(false);
-        }
-
-        if (
-            subtitlePlayEndTimeRef.current !== null &&
-            videoCurrentTime >= subtitlePlayEndTimeRef.current
-        ) {
-            video.pause();
-            setIsPlaying(false);
-            subtitlePlayEndTimeRef.current = null;
-            return;
         }
 
         if (repeat_StartTime !== repeat_EndTime) {
@@ -341,6 +383,7 @@ const App = () => {
         }
 
         if (isPlaying) {
+            clearSubtitlePlaybackLimit();
             videoRef.current.pause();
         } else {
             videoRef.current.play();
@@ -381,7 +424,7 @@ const App = () => {
 
     const handleChangeProgress = (e) => {
         isActiveProgress = true;
-        subtitlePlayEndTimeRef.current = null;
+        clearSubtitlePlaybackLimit();
 
         if (videoRef.current) {
             const newProgress = parseFloat(e.target.value);
@@ -423,12 +466,16 @@ const App = () => {
         repeat_StartTime = 0;
         repeat_EndTime = 0;
         repeatCount = repeatCountReset;
-        subtitlePlayEndTimeRef.current = subtitleEndTime;
 
         if (videoRef.current) {
             videoRef.current.currentTime = subtitleStartTime;
-            videoRef.current.play();
-            setIsPlaying(true);
+            videoRef.current.play().then(() => {
+                startSubtitlePlaybackLimit(subtitleEndTime);
+                setIsPlaying(true);
+            }).catch(() => {
+                clearSubtitlePlaybackLimit();
+                setIsPlaying(false);
+            });
         }
     };
 
